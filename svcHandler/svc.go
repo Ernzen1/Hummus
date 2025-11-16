@@ -9,11 +9,18 @@ import (
 	"github.com/kardianos/service"
 )
 
-type program struct {
-	quit chan struct{}
+type Program struct {
+	quit   chan struct{}
+	config bconfig.Config
 }
 
-func (p *program) Start(s service.Service) error {
+func NewProgram(cfg bconfig.Config) *Program {
+	return &Program{
+		config: cfg,
+	}
+}
+
+func (p *Program) Start(s service.Service) error {
 	log.Println("Starting service")
 
 	p.quit = make(chan struct{})
@@ -23,13 +30,36 @@ func (p *program) Start(s service.Service) error {
 
 }
 
-func (p *program) runBackupLoop() {
-	log.Println("Starting backup loop, running a backup every %d seconds", bconfig.AppConfig.Tick)
+func (p *Program) Stop(s service.Service) error {
+	log.Println("Stopping service")
+	close(p.quit)
+	return nil
+}
 
-	ticker := time.NewTicker((time.Duration(bconfig.AppConfig.Tick) * time.Second))
+func (p *Program) runBackupLoop() {
+	log.Printf("Starting backup loop, running a backup every %d seconds", bconfig.AppConfig.Tick)
+
+	ticker := time.NewTicker((time.Duration(p.config.Tick) * time.Second))
 
 	defer ticker.Stop()
 
 	log.Println("Starting backup for the first cycle")
-	p.RunBack
+	p.runBackupLogic()
+
+	for {
+		select {
+		case <-ticker.C:
+			log.Println("New backup cycle detected!")
+			p.runBackupLogic()
+
+		case <-p.quit:
+			log.Println("Quitting backup loop")
+			return
+		}
+
+	}
+}
+
+func (p *Program) runBackupLogic() {
+	backupEngine.BackupHandler(p.config.Paths, p.config.Location)
 }

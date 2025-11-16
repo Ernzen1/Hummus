@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 )
 
 func createSHA256Hash(data []byte) []byte {
@@ -22,15 +23,24 @@ func BackupHandler(sources, destinations []string) error {
 		sourceData, err := os.ReadFile(source)
 
 		if err != nil {
-			log.Printf("Error reading from file: %s %e", source, err)
+			log.Printf("Error reading from file: %s %s", source, err)
+			continue
 		}
 
 		sourcehash := createSHA256Hash(sourceData)
+		sourceFilename := filepath.Base(source)
 
 		for _, destination := range destinations {
-			err = backupFile(source, destination, sourceData, sourcehash)
+
+			if err := os.MkdirAll(destination, 0755); err != nil {
+				log.Printf("Error creating directory: %s %s", destination, err)
+				continue
+			}
+
+			fulldestination := filepath.Join(destination, sourceFilename)
+			err = backupFile(source, fulldestination, sourceData, sourcehash)
 			if err != nil {
-				log.Printf("Error creating backup file: %s %e", source, err)
+				log.Printf("Error creating backup file: %s %s", source, err)
 			}
 		}
 	}
@@ -46,7 +56,7 @@ func backupFile(source, destination string, sourceContent []byte, sourceHash []b
 		if errors.Is(err, os.ErrNotExist) {
 			log.Printf("Destionation files %s does not exist", destination)
 		} else {
-			return fmt.Errorf("Error reading from file: %s %e", destination, err)
+			return fmt.Errorf("error reading from file '%s':  %w", destination, err)
 		}
 	} else {
 		destHash := createSHA256Hash(destData)
@@ -60,7 +70,7 @@ func backupFile(source, destination string, sourceContent []byte, sourceHash []b
 	log.Printf("Data has changed!")
 
 	if err := os.WriteFile(destination, sourceContent, 0644); err != nil {
-		return fmt.Errorf("Error writing to file: %s %e", destination, err)
+		return fmt.Errorf("error writing to folder '%s':  %w", destination, err)
 	}
 
 	log.Printf("Successfully backed up file %s to %s", source, destination)
